@@ -290,6 +290,7 @@ int main(int argc, char **argv)
         quit(1);
     }
 
+    SDL_WM_SetCaption("Starfield", 0);
     initGL();
     initStars();
     resizeSky(width, height);
