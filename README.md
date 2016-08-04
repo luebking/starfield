@@ -17,6 +17,7 @@ Supported parameters (and defaults):
 * forward
 * backward (the default)
 * fullscreen
+* fps=0 (try 30, zero is uncapped)
 
 Keyboard actions:
 * F1        : toggle fullscreen

@@ -24,6 +24,7 @@ struct {
     int width, height;
     int fullscreen;
     int fsw, fsh;
+    unsigned int fps;
 } cfg;
 
 
@@ -49,6 +50,7 @@ void configure(int argc, char **argv)
     cfg.speed = 2.0f;
     cfg.spaceDepth = 1500;
     cfg.stars = 512;
+    cfg.fps = 0;
     int fwd = FALSE;
     for (int i = 1; i < argc; ++i) {
         if (strstr(argv[i], "speed=") == argv[i])
@@ -61,6 +63,8 @@ void configure(int argc, char **argv)
             cfg.width = atoi(argv[i] + 6);
         else if (strstr(argv[i], "height=") == argv[i])
             cfg.height = atoi(argv[i] + 7);
+        else if (strstr(argv[i], "fps=") == argv[i])
+            cfg.fps = atoi(argv[i] + 4);
         else if (!strcmp(argv[i], "forward"))
             fwd = TRUE;
         else if (!strcmp(argv[i], "backward"))
@@ -70,6 +74,8 @@ void configure(int argc, char **argv)
     }
     if (fwd)
         cfg.speed = -cfg.speed;
+    if (cfg.fps)
+        cfg.speed *= 60.0f/cfg.fps;
 }
 
 
@@ -315,6 +321,8 @@ int main(int argc, char **argv)
             }
         }
         drawGLScene();
+        if (cfg.fps)
+            SDL_Delay(1000/cfg.fps);
     }
 
     quit(0);
