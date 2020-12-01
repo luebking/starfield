@@ -22,9 +22,10 @@ struct {
     int spaceDepth;
     unsigned int stars;
     int width, height;
-    int fullscreen;
+    int fullscreen, movie;
     int fsw, fsh;
     unsigned int fps;
+    GLuint galaxy;
 } cfg;
 
 
@@ -33,7 +34,8 @@ struct {
     GLfloat *x, *y, *z;
 } star;
 
-GLfloat rotationSpeed = 0.0f;
+GLfloat galaxyCoords[4] = {0.0f, 1.0f, 1.0f, 0.0f};
+GLfloat galaxySize[2] = {1.0, 1.0};
 SDL_Surface *surface;
 
 void quit(int returnCode) {
@@ -46,11 +48,13 @@ void configure(int argc, char **argv)
     cfg.width = 768;
     cfg.height = 480;
     cfg.fullscreen = FALSE;
+    cfg.movie = FALSE;
     cfg.rotationZaxis = 0.0f;
     cfg.speed = 2.0f;
     cfg.spaceDepth = 1500;
     cfg.stars = 512;
     cfg.fps = 0;
+    cfg.galaxy = 0;
     int fwd = FALSE;
     for (int i = 1; i < argc; ++i) {
         if (strstr(argv[i], "speed=") == argv[i])
@@ -71,9 +75,37 @@ void configure(int argc, char **argv)
             fwd = FALSE;
         else if (!strcmp(argv[i], "fullscreen"))
             cfg.fullscreen = TRUE;
+        else if (!strcmp(argv[i], "galaxy"))
+            cfg.galaxy = 1;
+        else if (!strcmp(argv[i], "movie"))
+            cfg.movie = TRUE;
+        else if (!strcmp(argv[i], "help")) {
+            printf("\nSupported parameters and defaults\n---------------------------------\n"
+                   "speed=2.0 forward backward : speed and direction\n"
+                   "width=768 height=480 fullscreen : window geometry\n"
+                   "stars=512 spaceDepth=1500 : how many stars at the same time and deep you can see\n"
+                   "fps=0 : fps (0 = unlimited)\n"
+                   "galaxy : see the center of the galaxy\n"
+                   "movie : random speed fluctuation\n"
+                   "keys : print supported controls\n"
+                   "help : this help\n\n");
+            exit(0);
+        } else if (!strcmp(argv[i], "keys")) {
+            printf("\nF1 : toggle fullscreen\n"
+                   "arrow up/down : faster/slower\n"
+                   "arrow left/right : rotation\n"
+                   "d : flip direction\n"
+                   "escape : quit\n"
+                   "space : toggle breaks\n\n");
+            exit(0);
+        }
     }
     if (fwd)
         cfg.speed = -cfg.speed;
+    if (cfg.movie) {
+        cfg.fps = 30;
+        cfg.fullscreen = TRUE;
+    }
     if (cfg.fps)
         cfg.speed *= 60.0f/cfg.fps;
 }
@@ -84,7 +116,23 @@ int loadTextures() {
 
     SDL_Surface *textureImage;
     char filename[11];
+    
+    if (cfg.galaxy && (textureImage = IMG_Load("galaxy.jpg"))) {
+        galaxySize[0] = textureImage->w;
+        galaxySize[1] = textureImage->h;
+        glGenTextures(1, &cfg.galaxy);
+        glBindTexture(GL_TEXTURE_2D, cfg.galaxy);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
+                     textureImage->w, textureImage->h,
+                     0, GL_RGB, GL_UNSIGNED_BYTE, textureImage->pixels);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        SDL_FreeSurface(textureImage);
+    } else {
+        cfg.galaxy = 0; // file failure
+    }
 
+//    printf("%s/star_%d.jpg\n", FILEPATH, 1);
     for (int i = 0; i < 4; ++i) {
         sprintf(filename, "star_%d.jpg", i);
         if ((textureImage = IMG_Load(filename))) {
@@ -107,6 +155,24 @@ int loadTextures() {
 int resizeSky(int width, int height) {
     if (height == 0)
         height = 1;
+    if (width == 0)
+        width = 1;
+    GLfloat gw = galaxySize[0]/width;
+    GLfloat gh = galaxySize[1]/height;
+    if (gw > gh) {
+            float r = (1.0f-gh/gw)/2.0f;
+            galaxyCoords[0] = r;
+            galaxyCoords[1] = 1.0f - r;
+            galaxyCoords[2] = 1.0f;
+            galaxyCoords[3] = 0.0;
+        } else if (gw < gh) {
+            float r = (1.0-gw/gh)/2.0f;
+            galaxyCoords[0] = 0.0;
+            galaxyCoords[1] = 1.0f;
+            galaxyCoords[2] = 1.0f - r;
+            galaxyCoords[3] = r;
+        }
+
     GLfloat ratio = (GLfloat)width / (GLfloat)height;
     glViewport(0, 0, (GLint)width, (GLint)height);
     glMatrixMode(GL_PROJECTION);
@@ -149,8 +215,8 @@ void handleKeyPress(SDL_keysym *keysym)
     switch (keysym->sym) {
     case SDLK_UP: cfg.speed *= 2.0f; break;
     case SDLK_DOWN: cfg.speed /= 2.0f; break;
-    case SDLK_LEFT: rotationSpeed -= 0.1; break;
-    case SDLK_RIGHT: rotationSpeed += 0.1; break;
+    case SDLK_LEFT: cfg.rotationZaxis += 0.1; break;
+    case SDLK_RIGHT: cfg.rotationZaxis -= 0.1; break;
     case SDLK_d: cfg.speed = -cfg.speed; break;
     case SDLK_ESCAPE: quit(0); break;
     case SDLK_F1: toggleFullscreen(); break;
@@ -210,9 +276,28 @@ int drawGLScene(GLvoid)
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glLoadIdentity();
-    glTranslatef(-0.0f, -0.0f, -5.0f);
+    glMatrixMode(GL_PROJECTION);
+    if (cfg.galaxy) {    
+        glPushMatrix();
+        glLoadIdentity();
+    //    glOrtho(0, 100.0, 0.0, 100.0, 1.0f, 1.0f);
+        glBindTexture(GL_TEXTURE_2D, cfg.galaxy);
+    //    glDepthMask(GL_FALSE);
+    //    drawStar();
+        glBegin(GL_QUADS);
+          glTexCoord2f(galaxyCoords[0], galaxyCoords[2]); glVertex3f(-1.0f, -1.0f, 1.0f);
+          glTexCoord2f(galaxyCoords[1], galaxyCoords[2]); glVertex3f( 1.0f, -1.0f, 1.0f);
+          glTexCoord2f(galaxyCoords[1], galaxyCoords[3]); glVertex3f( 1.0f,  1.0f, 1.0f);
+          glTexCoord2f(galaxyCoords[0], galaxyCoords[3]); glVertex3f(-1.0f,  1.0f, 1.0f);
+        glEnd();
+        glPopMatrix();
+    }
     glRotatef(cfg.rotationZaxis, 0.0f, 0.0f, 1.0f);
+    glMatrixMode(GL_MODELVIEW);
+    
+    glLoadIdentity();
+//    glTranslatef(-0.0f, -0.0f, -5.0f);
+//    glRotatef(cfg.rotationZaxis, 0.0f, 0.0f, 1.0f);
 
 
     int i = 0;
@@ -242,8 +327,6 @@ int drawGLScene(GLvoid)
     }
 
     SDL_GL_SwapBuffers();
-
-    cfg.rotationZaxis += rotationSpeed;
 
     return(TRUE);
 }
@@ -319,6 +402,19 @@ int main(int argc, char **argv)
                 break;
             default:
                 break;
+            }
+        }
+        if (cfg.movie) {
+            int r = rand() % 100;
+            if (!r) {
+                r = rand() % 2;
+                switch (r) {
+                    case 0: cfg.speed *= 2.0f; break;
+                    case 1: cfg.speed /= 2.0f; break;
+                    case 2: cfg.rotationZaxis += 0.1; break;
+                    case 3: cfg.rotationZaxis -= 0.1; break;
+                    default: break;
+                }
             }
         }
         drawGLScene();
