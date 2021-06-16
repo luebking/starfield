@@ -4,7 +4,7 @@ Reminiscence to the screensaver that shipped until WinXP
 Requires libGL and SDL.
 
 Building with
-    gcc -o starfield starfield.c -O2 -lglut -lGL -lGLU -lSDL -lSDL_image
+    gcc -o starfield starfield.c -O2 -lglut -lGL -lGLU -lSDL -lSDL_image -lX11
 
 starfield expects the star_[0-3].jpg images in PWD (ie in doubt "next to it")
 

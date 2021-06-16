@@ -1,6 +1,6 @@
 /*
 *  Compilation trough:
-*     gcc -o starfield starfield.c -O2 -lglut -lGL -lGLU -lSDL -lSDL_image
+*     gcc -o starfield starfield.c -O2 -lglut -lGL -lGLU -lSDL -lSDL_image -lX11
 *
 */
 
@@ -10,11 +10,14 @@
 #include <GL/glu.h>
 #include "SDL/SDL.h"
 #include <SDL/SDL_image.h>
+#include <SDL/SDL_syswm.h>
+#include <X11/Xlib.h>
 
 #define SCREEN_BPP 16
 
 #define TRUE  1
 #define FALSE 0
+
 
 struct {
     GLfloat rotationZaxis;
@@ -26,6 +29,7 @@ struct {
     int fsw, fsh;
     unsigned int fps;
     GLuint galaxy;
+    int bedID;
 } cfg;
 
 
@@ -55,6 +59,7 @@ void configure(int argc, char **argv)
     cfg.stars = 512;
     cfg.fps = 0;
     cfg.galaxy = 0;
+    cfg.bedID = 0;
     int fwd = FALSE;
     for (int i = 1; i < argc; ++i) {
         if (strstr(argv[i], "speed=") == argv[i])
@@ -79,6 +84,8 @@ void configure(int argc, char **argv)
             cfg.galaxy = 1;
         else if (!strcmp(argv[i], "movie"))
             cfg.movie = TRUE;
+        else if (!strcmp(argv[i], "-wid") && argc > i) // "-wid" syntax so that eg. xwinwrap can replace the WID
+            cfg.bedID = strtod(argv[i+1], NULL);
         else if (!strcmp(argv[i], "help")) {
             printf("\nSupported parameters and defaults\n---------------------------------\n"
                    "speed=2.0 forward backward : speed and direction\n"
@@ -108,11 +115,12 @@ void configure(int argc, char **argv)
     }
     if (cfg.fps)
         cfg.speed *= 60.0f/cfg.fps;
+    if (cfg.bedID)
+        cfg.fullscreen = FALSE; // embedding a FS window somehow doesn't work - might be WM dependent
 }
 
 
 int loadTextures() {
-    int Status = FALSE;
 
     SDL_Surface *textureImage;
     char filename[11];
@@ -371,6 +379,23 @@ int main(int argc, char **argv)
     if (!surface) {
         fprintf(stderr,  "Video mode set failed: %sn", SDL_GetError());
         quit(1);
+    }
+    if (cfg.bedID) {
+        SDL_SysWMinfo info;
+        SDL_VERSION(&info.version);
+        if (SDL_GetWMInfo(&info)) {
+            /*XUnmapWindow(info.info.x11.display, info.info.x11.window);
+            XSync(info.info.x11.display, FALSE);*/
+            Window root, dad;
+            Window *kids;
+            unsigned int fertility;
+            XQueryTree(info.info.x11.display, info.info.x11.window, &root, &dad, &kids, &fertility);
+            if (kids)
+                XFree(kids);
+            XReparentWindow(info.info.x11.display, info.info.x11.window, cfg.bedID, 0, 0);
+            if (dad != root)
+                XUnmapWindow(info.info.x11.display, dad);
+        }
     }
 
     SDL_WM_SetCaption("Starfield", 0);
